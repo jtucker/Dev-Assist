@@ -8,3 +8,7 @@ Describe "Module Manifest Tests" {
         $? | Should be $true
     }
 }
+
+Describe "Initialize-RpsRepository Tests" {
+    
+}

@@ -87,3 +87,88 @@ function Add-CertToGit
     Add-Content -Path $crtInfo.FullName -Value "`n$certBegin`n$rootBase64`n$certEnd" -NoNewline
     #git config --global http.sslCAInfo $crtInfo.FullName
 }
+
+function Initialize-RpsDevelopmentEnvironment
+{
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		$TempLocation, 
+
+		[Parameter(Mandatory = $true)]
+		$TfsServerName,
+
+		[Parameter()]
+		[switch]
+		$UseVisualStudioGit
+	)
+
+	$tempRpsDevDirectory = Join-Path $TempLocation "RPSDevSetup"
+	if(-Not (Test-Path $tempRpsDevDirectory)) {
+		mkdir $tempRpsDevDirectory | Out-Null
+	}
+
+	Install-DodCertificates -TempLocation $tempRpsDevDirectory
+	
+	Write-Host "Starting the configuration of Git for accessing RPS Repos"
+	$gitCommand = Get-GitInstallLocation -TempLocation $TempLocation -UseVisualStudioGit:$UseVisualStudioGit
+
+	# Get the exported DOD Cert (will save the file as well)
+	#$certificatePath = Join-Path $tempRpsDevDirectory "dodCert.cer"
+	#$exportedCert = exportDodRootCert -ExportFileLocation $certificatePath
+	# update the CA-Bundle with a line break
+	# Write-Host "`tAdding the cert to the ca-bundle"
+	# Add-Content $env:USERPROFILE\ca-bundle.crt "`r`n"
+	# # update the CA-Bundle with the exported cert
+	# Add-Content $env:USERPROFILE\ca-bundle.crt $exportedCert
+
+	Write-Host "`tConfiguring VS Git Install to connect to TFS"
+	& $gitCommand config --global credential.$($TfsServerName).authority negotiate
+	& $gitCommand config --global http.sslbackend schannel
+
+	Write-Host "You are now setup to the RPS Repository in TFS." -ForegroundColor Green
+	Start-Sleep -Seconds 5
+}
+
+function Install-DodCertificates 
+{
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		$TempLocation
+	)
+
+	Write-Host "Starting configuration for DoD Certs..."
+
+	getDodInstallRootInstaller -TempFolderLocation $TempLocation `
+		| installDodInstallRoot `
+		| Out-Null
+}
+
+function Get-GitInstallLocation
+{
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		$TempLocation,
+		
+		[Parameter()]
+		[switch]
+		$UseVisualStudioGit		
+	)
+
+	$gitCommand = $gitCommand = Get-Command git -ErrorAction SilentlyContinue | Select-Object Source -ExpandProperty Source	
+	if($UseVisualStudioGit)
+	{
+		Write-Host "`tUsing `vswhere` to determine location of Visual Studio Git..."
+		$vsGitLocation = getVswhereUrlFromGithub `
+			| getVswhereFromGithub -TempFolderLocation $TempLocation `
+			| getVisualStudioGitLocation -GetPrereleaseVersion 
+		$gitCommand = Join-Path $vsGitLocation "cmd\git.exe"
+	}
+
+	$gitCommand
+}
